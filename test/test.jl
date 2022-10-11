@@ -7,20 +7,12 @@ den = -21999
 N = 9656
 
 
-num = 11900 
-den = -8717
-N = 9813
-c = big(num) // big(den)
-for i=1:N
-    try
-        f(c*i)
-    catch
-        println(i)
-    end
-end
-#summer = periodic_summer(num,den)
+num = -26648
+den = 2
+N = 9576
 
-for _=1:1000
+
+@showprogress for _=1:1000
     num = rand(Int16)
     den = rand(Int16)
     N = rand(1:10000)
@@ -38,3 +30,17 @@ for _=1:1000
     end
 end
 
+using CairoMakie
+
+fig = Figure()
+ax = Axis(fig[1, 1])
+ax2 = Axis(fig[2,1])
+cc = 200//577
+for i=1:26
+    x = cc*i
+    y = f(x)
+    scatter!(ax,x,y,color=y==1 ? "red" : "blue")
+    x = cc * (i+26)
+    y=f(x)
+    scatter!(ax2,x,y,color= y==1 ? "red" : "blue")
+end

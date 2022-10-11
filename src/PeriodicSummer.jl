@@ -10,16 +10,15 @@ struct periodic_summer{T<:Signed}
 end
 
 function f(x)
-    if x>=0 && x<1
-        return -1
-    elseif x>=1 && x<2
-        return 1
-    else
-        return f(x%2)
-    end
+    #TODO: type stable code
+    x < 0 && return -f(-x)
+    x % 1 == 0 && return zero(x)
+    x % 2 < 1 && return -one(x)
+    return one(x)
 end
 
 function euclidean_process(p,q)
+    #TODO:maybe issue if bigint overflow?
     tmp = typeof((1,1,1,1))[]
 
     #use euclidean algorithm to get intermediate steps
@@ -45,6 +44,8 @@ function continued_fraction_approximations(arr)
     #   (p1*p2+1)*r0 = (p0*(p1*p2 + 1) + p2)*r1 + r4 (5)
     #
     #   denote the left coefficient by lc, and the right coefficient by rc
+    
+    #TODO:maybe overflow if arr has bigInt?
     tmp = [(1,arr[1][2])]
     for i=2:length(arr)
         lc_old,rc_old = 1,arr[i][2]
@@ -57,56 +58,74 @@ function continued_fraction_approximations(arr)
     return tmp
 end
 
-function (x::periodic_summer{T})(N::T) where T<:Signed
+
+function (x::periodic_summer{U})(N::V) where {U<:Signed,V<:Signed}
+    #the return type should be promote_type(T,typeof(N))
+    T = promote_type(U,V)
     N < 1 && return zero(T)
-    x.num == 0 && return -N * x.coeff
-    x.num == x.den && return iseven(N) ? zero(T) : -one(T) * x.coeff
+    x.den == 1 && return zero(T)
     #the constructor guarantees 0<=x.num<=x.den
     return sum_f_helper(N,x.table) * x.coeff
 end
 
-function sum_f_helper(N::T,sol::Matrix{T}) where T<:Signed
+
+function sum_f_helper(N::U,sol::Matrix{V}) where {U<:Signed,V<:Signed}
+    T = promote_type(U,V)
     n_,l_,s_ = zero(T),zero(T),zero(T)
     #reconstruct the sum from known sums
     for i ∈ size(sol)[1]:-1:1
-        n,l,s = sol[i,:]
+        #n,l,s = sol[i,:]
         # next line is a implementation detail
         # essentially skip some lines during construction
-        n == 0 && continue
-        k,_ = divrem(N - n_,n)
-        tmp = iseven(l) ? k*s : (iseven(k) ? zero(T) : s)
-        s_ += (-1)^(l_) * tmp
-        n_ += k*n
-        l_ += k*l
+        #n == 0 && continue
+        #k = (N - n_)÷n
+        #tmp = iseven(l) ? k*s : (iseven(k) ? zero(T) : s)
+        #s_ += isodd(l_) ? -tmp : tmp
+        #n_ += k*n
+        #l_ += k*l
+        sol[i,1] == 0 && continue
+        k = (N - n_)÷sol[i,1]
+        tmp = iseven(sol[i,2]) ? k*sol[i,3] : (iseven(k) ? zero(T) : sol[i,3])
+        s_ += isodd(l_) ? -tmp : tmp 
+        n_ += k*sol[i,1]
+        l_ += k*sol[i,2]
     end
     return s_
 end
 
+periodic_summer(num::Signed,den::Signed) = periodic_summer(promote(num,den)...)
+
 function periodic_summer(num::T,den::T) where T<:Signed
     #TODO: assert num,den,N validity
     @assert den != 0 "denominator should not be zero"
+    if !isa(den,BigInt)
+        @assert den != typemin(T) "denominator must not equal typemin"
+    end
 
     #   First, pull out the sign since f(-x) = -f(x)
     c = sign(num) * sign(den)
 
-    num == den && return periodic_summer(one(T),one(T),one(T),zeros(T,0,0))
-    #add this line to deal with the special case num == den == typemin(T)
-    #this will cause overflow in gcd
-
     #   Then, simplify fraction
     g = gcd(num,den)
-    num_,den_ = abs(num÷g),abs(den÷g)
+    num,den = abs(num÷g),abs(den÷g)
 
     #   Then, reduce to [-1,1] since f(x+2) = f(x)
     #   And since f(-x) = -f(x), further reduce to [0,1]
-    k,r = divrem(num_,den_)
+    k,r = divrem(num,den)
     k = k % 2
 
-    r == 0 && return periodic_summer(k==0 ? zero(T) : one(T),one(T),one(T),zeros(T,0,0))
+    #degenerate case
+    r == 0 && return periodic_summer(k,one(T),one(T),zeros(T,0,0))
 
-    k == 1 && (c = -c; num_ = den_ - r)
+    #move range from [-1,0] to [0,1]
+    k == 1 && (c = -c; num = den - r)
 
-    arr = euclidean_process(num_,den)
+
+    #TODO: maybe could do euclidean process(den,num) instead
+    #which is equivalent to starting everything at index 2
+    #simplifies some unnecessary steps
+    #UPDATE: maybe bad idea
+    arr = euclidean_process(num,den)
     cf = continued_fraction_approximations(arr)
 
     table = zeros(T,length(cf),3)
@@ -116,10 +135,10 @@ function periodic_summer(num::T,den::T) where T<:Signed
         r = -(-1)^i * arr[i][4]
         #try to see how much of the previous largest solution we can fit in
         s = sum_f_helper(n-1,table)
-        tmp = iseven(l - i) ? 1 : -1
-        s += (r != 0) ? tmp : -tmp
+        tmp = iseven(l - i) ? one(T) : -one(T)
+        s += (r != 0) ? tmp : zero(T)
         table[i,:] = [n,l,s]
     end
 
-    return periodic_summer(num_,den_,c,table)
+    return periodic_summer(num,den,c,table)
 end

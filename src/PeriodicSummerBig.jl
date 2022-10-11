@@ -5,16 +5,27 @@ struct periodic_summer
     table::Matrix{BigInt}
 end
 
+"""
+    Revise f to have to following definition
+    f(x) = -1 if x∈(0,1)
+    f(x) = 1 if x∈(1,2)
+    f(x) = 0 if x is Integer
+    f(x) = f(x+2)
+
+    Compared to the previous definition
+    f(x) = -1 if x∈[0,1)
+    f(x) = 1 if x∈[1,2)
+    f(x) = f(x+2)
+
+    Now f is truly an odd function. 
+    The previous definition, f is even at integer
+"""
 function f(x)
-    if x<0
-        return (x % 1 == 0) ? f(-x) : -f(-x)
-    elseif x>=0 && x<1
-        return -1
-    elseif x>=1 && x<2
-        return 1
-    else
-        return f(x%2)
-    end
+    #TODO: type stable code
+    x < 0 && return -f(-x)
+    x % 1 == 0 && return 0
+    x % 2 < 1 && return -1
+    return 1
 end
 
 function euclidean_process(p,q)
@@ -56,9 +67,11 @@ function continued_fraction_approximations(arr)
 end
 
 function (x::periodic_summer)(N)
+    #TODO:write type stable code
     N < 1 && return big(0)
-    x.num == 0 && return -N * x.coeff
-    x.num == x.den && return iseven(N) ? big(0) : big(-x.coeff)
+    x.num == 0 && return big(0)
+    #den==1 covers all cases where num==k*den
+    x.den == 1 && return big(0)
     #the constructor guarantees 0<=x.num<=x.den
     return sum_f_helper(N,x.table) * x.coeff
 end
@@ -112,7 +125,7 @@ function periodic_summer(num::Integer,den::Integer)
         #try to see how much of the previous largest solution we can fit in
         s = sum_f_helper(n-1,table)
         tmp = iseven(l - i) ? 1 : -1
-        s += (r != 0) ? tmp : -tmp
+        s += (r != 0) ? tmp : 0
         table[i,:] = [n,l,s]
     end
 
